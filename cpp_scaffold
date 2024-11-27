@@ -24,35 +24,29 @@
 
 # Function to install the script
 install_script() {
-    local script_path="/usr/local/bin/cpp_scaffold"
-    echo "Installing cpp_scaffold script..."
+    # Create directory for user-local binaries if it doesn't exist
+    mkdir -p "$HOME/.local/bin"
     
-    # Copy script to /usr/local/bin
-    if [ -w "/usr/local/bin" ]; then
-        cp "$0" "$script_path"
-        chmod +x "$script_path"
-    else
-        sudo cp "$0" "$script_path"
-        sudo chmod +x "$script_path"
+    # Copy script to user's local bin
+    local script_path="$HOME/.local/bin/cpp_scaffold"
+    echo "Installing cpp_scaffold script to $script_path..."
+    cp "$0" "$script_path"
+    chmod +x "$script_path"
+
+    # Configure zsh
+    local zshrc="$HOME/.zshrc"
+    
+    # Check if PATH already includes .local/bin
+    if ! grep -q "$HOME/.local/bin" "$zshrc"; then
+        echo "Adding cpp_scaffold to $zshrc..."
+        echo '' >> "$zshrc"
+        echo '# cpp_scaffold path' >> "$zshrc"
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$zshrc"
     fi
 
-    # Add to shell configuration
-    local shell_config=""
-    if [ -n "$ZSH_VERSION" ]; then
-        shell_config="$HOME/.zshrc"
-    elif [ -n "$BASH_VERSION" ]; then
-        shell_config="$HOME/.bashrc"
-    fi
-
-    if [ -n "$shell_config" ]; then
-        echo "Adding cpp_scaffold to $shell_config..."
-        echo '# cpp_scaffold configuration' >> "$shell_config"
-        echo 'export PATH="/usr/local/bin:$PATH"' >> "$shell_config"
-        echo "cpp_scaffold has been added to $shell_config"
-        echo "Please run 'source $shell_config' to apply changes"
-    else
-        echo "Unsupported shell. Please manually add /usr/local/bin to your PATH"
-    fi
+    echo "Installation complete!"
+    echo "Please run: source ~/.zshrc"
+    echo "Then you can use 'cpp_scaffold <project_name>' from anywhere"
 }
 
 # Check if installation is requested
