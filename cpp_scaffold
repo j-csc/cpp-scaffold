@@ -1,0 +1,319 @@
+#!/bin/bash
+
+# 
+# A script to create a basic C++ project structure.
+# 
+# It will create a project directory with src, include, build and test directories.
+# It will also create a basic main.cpp file and a CMakeLists.txt file.
+# It comes with vcpkg integration.
+# 
+# Usage:
+# 
+#     cpp_scaffold <project_name>
+# 
+# Example:
+# 
+#     cpp_scaffold my_project
+# 
+# To install the script, run:
+#
+#     cpp_scaffold --install
+#
+# 
+
+
+# Function to install the script
+install_script() {
+    local script_path="/usr/local/bin/cpp_scaffold"
+    echo "Installing cpp_scaffold script..."
+    
+    # Copy script to /usr/local/bin
+    if [ -w "/usr/local/bin" ]; then
+        cp "$0" "$script_path"
+        chmod +x "$script_path"
+    else
+        sudo cp "$0" "$script_path"
+        sudo chmod +x "$script_path"
+    fi
+
+    # Add to shell configuration
+    local shell_config=""
+    if [ -n "$ZSH_VERSION" ]; then
+        shell_config="$HOME/.zshrc"
+    elif [ -n "$BASH_VERSION" ]; then
+        shell_config="$HOME/.bashrc"
+    fi
+
+    if [ -n "$shell_config" ]; then
+        echo "Adding cpp_scaffold to $shell_config..."
+        echo '# cpp_scaffold configuration' >> "$shell_config"
+        echo 'export PATH="/usr/local/bin:$PATH"' >> "$shell_config"
+        echo "cpp_scaffold has been added to $shell_config"
+        echo "Please run 'source $shell_config' to apply changes"
+    else
+        echo "Unsupported shell. Please manually add /usr/local/bin to your PATH"
+    fi
+}
+
+# Check if installation is requested
+if [ "$1" = "--install" ]; then
+    install_script
+    exit 0
+fi
+
+# Check if a project name was provided
+if [ $# -eq 0 ]; then
+    echo "Usage: cpp_scaffold <project_name>"
+    echo "       cpp_scaffold --install (to install the script)"
+    exit 1
+fi
+
+PROJECT_NAME=$1
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+
+# Create project directory
+mkdir -p "$PROJECT_NAME"/{src,include,tests}
+cd "$PROJECT_NAME"
+
+# Initialize git repository
+git init
+
+# Create main CMakeLists.txt
+cat > CMakeLists.txt << 'EOL'
+cmake_minimum_required(VERSION 3.15)
+
+# Set project name and version
+project(${PROJECT_NAME} VERSION 1.0
+    DESCRIPTION ""
+    LANGUAGES CXX)
+
+# Specify C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Output directories
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# Add include directories
+include_directories(${CMAKE_SOURCE_DIR}/include)
+
+# Add subdirectories for source code and tests
+add_subdirectory(src)
+add_subdirectory(tests)
+
+# Enable testing
+enable_testing()
+EOL
+
+# Replace placeholder with actual project name
+sed -i '' "s/\${PROJECT_NAME}/$PROJECT_NAME/g" CMakeLists.txt
+
+# Create src/CMakeLists.txt
+cat > src/CMakeLists.txt << 'EOL'
+add_executable(${PROJECT_NAME} main.cpp)
+
+target_include_directories(${PROJECT_NAME}
+    PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+)
+
+# Find and link fmt library
+find_package(fmt CONFIG REQUIRED)
+target_link_libraries(${PROJECT_NAME} PRIVATE fmt::fmt)
+EOL
+
+# Replace placeholder with actual project name
+sed -i '' "s/\${PROJECT_NAME}/$PROJECT_NAME/g" src/CMakeLists.txt
+
+# Create tests/CMakeLists.txt
+cat > tests/CMakeLists.txt << 'EOL'
+find_package(GTest CONFIG REQUIRED)
+
+add_executable(${PROJECT_NAME}_tests test_main.cpp)
+target_link_libraries(${PROJECT_NAME}_tests PRIVATE GTest::gtest GTest::gtest_main)
+
+add_test(NAME ${PROJECT_NAME}_tests COMMAND ${PROJECT_NAME}_tests)
+EOL
+
+# Replace placeholder with actual project name
+sed -i '' "s/\${PROJECT_NAME}/$PROJECT_NAME/g" tests/CMakeLists.txt
+
+# Create source files
+cat > src/main.cpp << 'EOL'
+#include <fmt/core.h>
+
+int main() {
+    fmt::print("Hello from {}!\n", PROJECT_NAME);
+    return 0;
+}
+EOL
+
+# Replace placeholder with actual project name
+sed -i '' "s/PROJECT_NAME/\"$PROJECT_NAME\"/g" src/main.cpp
+
+# Create test file
+cat > tests/test_main.cpp << 'EOL'
+#include <gtest/gtest.h>
+
+// Sample test case
+TEST(SampleTest, BasicAssertions) {
+    EXPECT_TRUE(true);
+    EXPECT_EQ(2 + 2, 4);
+}
+EOL
+
+# Create vcpkg.json
+cat > vcpkg.json << EOL
+{
+    "name": "$PROJECT_NAME",
+    "version": "1.0.0",
+    "dependencies": [
+        {
+            "name": "fmt",
+            "version>=": "9.1.0"
+        },
+        {
+            "name": "gtest"
+        }
+    ],
+    "builtin-baseline": "8eb57355a4ffb410a2e94c07b4dca2dffbee8e50"
+}
+EOL
+
+# Create CMakePresets.json
+cat > CMakePresets.json << 'EOL'
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "Default Config",
+            "generator": "Unix Makefiles",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_TOOLCHAIN_FILE": "${sourceDir}/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "CMAKE_C_COMPILER": "clang",
+                "CMAKE_CXX_COMPILER": "clang++"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "default",
+            "configurePreset": "default"
+        }
+    ]
+}
+EOL
+
+# Create .vscode directory and settings
+mkdir -p .vscode
+cat > .vscode/settings.json << 'EOL'
+{
+    "cmake.configureSettings": {
+        "CMAKE_TOOLCHAIN_FILE": "${workspaceFolder}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    "cmake.preferredGenerators": [
+        "Unix Makefiles"
+    ],
+    "cmake.configureOnOpen": true,
+    "cmake.buildDirectory": "${workspaceFolder}/build"
+}
+EOL
+
+# Create .gitignore
+cat > .gitignore << 'EOL'
+# Build directories
+build/
+out/
+cmake-build-*/
+
+# vcpkg specific
+vcpkg_installed/
+
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# IDE specific
+.vscode/*
+!.vscode/settings.json
+!.vscode/cmake-kits.json
+.idea/
+*.swp
+*.swo
+
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Cache files
+.cache/
+compile_commands.json
+.clangd/
+
+# CMake
+CMakeLists.txt.user
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+_deps/
+EOL
+
+# Initialize vcpkg as a submodule
+git submodule add https://github.com/Microsoft/vcpkg.git
+./vcpkg/bootstrap-vcpkg.sh
+
+# Initial commit
+git add .
+git commit -m "Initial project setup"
+
+echo "Project $PROJECT_NAME has been created successfully!"
+echo "To get started:"
+echo "1. cd $PROJECT_NAME"
+echo "2. cmake --preset default"
+echo "3. cmake --build build"
+echo "4. ./build/bin/${PROJECT_NAME}_tests"
+
+# Offer to install the script if running directly
+if [ ! -f "/usr/local/bin/cpp_scaffold" ]; then
+    read -p "Would you like to install cpp_scaffold globally? (y/n) " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        install_script
+    fi
+fi
